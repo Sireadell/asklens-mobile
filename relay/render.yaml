@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: asklens-relay
+    runtime: node
+    rootDir: relay
+    plan: free
+    buildCommand: npm install
+    startCommand: node server.js
+    healthCheckPath: /health

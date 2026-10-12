@@ -1,0 +1,15 @@
+﻿node_modules/
+.env
+*.apk
+.expo/
+android/
+ios/
+google-services.json
+
+_private/
+NOTES-SKR.md
+SUBMISSION_ANSWERS.md
+video/
+google-services.json
+*service-account*.json
+

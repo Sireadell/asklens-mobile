@@ -1,0 +1,11 @@
+{
+  "name": "asklens-pc-companion",
+  "version": "1.0.0",
+  "description": "Sends the links and wallet addresses you copy on your PC to the AskLens Guard app on your phone.",
+  "main": "companion.js",
+  "bin": { "asklens-companion": "companion.js" },
+  "scripts": { "start": "node companion.js" },
+  "engines": { "node": ">=20" },
+  "dependencies": { "qrcode-terminal": "^0.12.0" },
+  "license": "MIT"
+}

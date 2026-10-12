@@ -1,0 +1,53 @@
+{
+  "expo": {
+    "name": "AskLens Guard",
+    "slug": "asklens-guard",
+    "scheme": "asklensguard",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#0B0F14",
+    "ios": {
+      "bundleIdentifier": "com.asklens.guard"
+    },
+    "android": {
+      "package": "com.asklens.guard",
+      "adaptiveIcon": {
+        "backgroundColor": "#0B0F14",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "category": ["BROWSABLE", "DEFAULT"],
+          "data": [{ "scheme": "https" }, { "scheme": "http" }]
+        }
+      ]
+    },
+    "plugins": [
+      [
+        "expo-share-intent",
+        {
+          "androidIntentFilters": [
+            "text/*"
+          ],
+          "disableIOS": true
+        }
+      ],
+      "expo-sharing",
+      "expo-notifications",
+      ["expo-camera", { "recordAudioAndroid": false, "cameraPermission": "AskLens Guard uses the camera only to scan a QR code, so you can check it before opening." }],
+      "expo-build-properties"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "2af5a364-f75d-453c-b48f-a5c69283eaa6"
+      }
+    },
+    "owner": "sireadell"
+  }
+}
