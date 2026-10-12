@@ -1,15 +1,22 @@
 import type { CheckResult } from '../types';
 
-// Track B's code lives in src/solana. It is loaded if present so this app
-// still builds and runs while that part is being finished.
+// The Solana code is large, so it is loaded the first time something needs it
+// (saving a proof, reading a wallet), not when the app opens.
 let solana: any = null;
-try {
-  solana = require('../solana');
-} catch {
-  solana = null;
+let tried = false;
+function getSolana(): any {
+  if (!tried) {
+    tried = true;
+    try {
+      solana = require('../solana');
+    } catch {
+      solana = null;
+    }
+  }
+  return solana;
 }
 
-export const solanaReady = !!solana?.saveReceipt;
+export const solanaReady = () => !!getSolana()?.saveReceipt;
 
 export interface ReceiptOutcome {
   ok: boolean;
@@ -19,13 +26,14 @@ export interface ReceiptOutcome {
 }
 
 export async function saveProofOnSolana(result: CheckResult): Promise<ReceiptOutcome> {
+  const solana = getSolana();
   if (!solana?.saveReceipt) {
     return { ok: false, message: 'Saving proof on Solana is not switched on in this build yet.' };
   }
   try {
     const out = await solana.saveReceipt(result);
     const signature = typeof out === 'string' ? out : out?.signature;
-    return { ok: true, signature, explorerUrl: out?.explorerUrl, message: 'Proof saved on Solana.' };
+    return { ok: true, signature, explorerUrl: out?.explorerUrl, message: `Proof saved on Solana. Signed in ${(await solana.getWalletName?.()) ?? 'your wallet app'}.` };
   } catch (e: any) {
     const raw = e?.message ?? '';
     const message = solana.friendlyError
@@ -38,6 +46,7 @@ export async function saveProofOnSolana(result: CheckResult): Promise<ReceiptOut
 }
 
 export async function profileFor(address: string): Promise<any | null> {
+  const solana = getSolana();
   if (!solana?.getWalletProfile) return null;
   try {
     return await solana.getWalletProfile(address);
@@ -48,6 +57,7 @@ export async function profileFor(address: string): Promise<any | null> {
 
 /** Explorer links of saved proofs, keyed by input + time of the check. */
 export async function loadProofLinks(): Promise<Record<string, string>> {
+  const solana = getSolana();
   const map: Record<string, string> = {};
   try {
     const all: any[] = (await solana?.getReceipts?.()) ?? [];
@@ -58,6 +68,7 @@ export async function loadProofLinks(): Promise<Record<string, string>> {
 
 /** Connected wallet address, or null when no wallet is connected. */
 export async function getConnectedAddressSafe(): Promise<string | null> {
+  const solana = getSolana();
   try {
     return (await solana?.getConnectedAddress?.()) ?? null;
   } catch {
@@ -67,6 +78,7 @@ export async function getConnectedAddressSafe(): Promise<string | null> {
 
 /** Holder tier for a wallet. Returns null if the Solana part is not in this build or cannot be read. */
 export async function tierFor(address: string): Promise<{ tier: 'free' | 'holder'; skr: number } | null> {
+  const solana = getSolana();
   if (!solana?.getGuardTier) return null;
   try {
     return await solana.getGuardTier(address);

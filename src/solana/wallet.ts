@@ -6,7 +6,7 @@ import { createMemoInstruction } from '@solana/spl-memo';
 import { Connection, LAMPORTS_PER_SOL, PublicKey, TransactionMessage, VersionedTransaction } from '@solana/web3.js';
 import type { CheckResult } from '../types';
 import { explorerTxUrl, getCluster, rpcUrl } from './config';
-import { buildReceiptMemo } from './receipt';
+import { buildReceiptMemo, factsHash } from './receipt';
 import { friendlyError } from './errors';
 import { fetchRetry } from './net';
 import { buildRevokeInstruction } from './revoke';
@@ -15,6 +15,27 @@ import { streakFrom } from './streak';
 const APP_IDENTITY = { name: 'AskLens Guard', uri: 'https://asklens-zoox.onrender.com', icon: 'favicon.ico' };
 const AUTH_KEY = 'asklens.wallet.auth';
 const RECEIPTS_KEY = 'asklens.receipts';
+const WALLET_NAME_KEY = 'asklens.wallet.name';
+
+/** The wallet's own name, as it reports it when we connect. Never guessed. */
+async function rememberWalletName(auth: any): Promise<void> {
+  try {
+    const label = auth?.accounts?.[0]?.label;
+    let name = typeof label === 'string' && label.trim() ? label.trim() : '';
+    if (!name && typeof auth?.wallet_uri_base === 'string') {
+      name = auth.wallet_uri_base.replace(/^https?:\/\//, '').split('/')[0].replace(/^www\./, '');
+    }
+    await AsyncStorage.setItem(WALLET_NAME_KEY, name);
+  } catch {}
+}
+
+export async function getWalletName(): Promise<string> {
+  try {
+    return (await AsyncStorage.getItem(WALLET_NAME_KEY)) || 'your wallet app';
+  } catch {
+    return 'your wallet app';
+  }
+}
 
 export interface Receipt {
   signature: string;
@@ -65,6 +86,7 @@ async function connectWalletInner(): Promise<{ address: string }> {
     });
   });
   const address = toAddress(result.accounts[0].address).toBase58();
+  await rememberWalletName(result);
   session = { address, authToken: result.auth_token, cluster };
   await persistSession();
   return { address };
@@ -136,7 +158,7 @@ async function saveReceiptInner(result: CheckResult): Promise<{ signature: strin
   const cluster = getCluster();
   const conn = connection();
   const streak = streakFrom(await getReceipts(), Date.now(), true);
-  const memo = buildReceiptMemo({ input: result.input, verdict: result.verdict, checkedAt: result.checkedAt, streak });
+  const memo = buildReceiptMemo({ input: result.input, verdict: result.verdict, checkedAt: result.checkedAt, streak, facts: factsHash(result.verdict, result.reasons) });
   const old = await loadSession();
 
   const {
@@ -151,6 +173,7 @@ async function saveReceiptInner(result: CheckResult): Promise<{ signature: strin
       auth_token: old && old.cluster === cluster ? old.authToken : undefined,
     });
     const payer = toAddress(auth.accounts[0].address);
+    await rememberWalletName(auth);
     session = { address: payer.toBase58(), authToken: auth.auth_token, cluster };
     const message = new TransactionMessage({
       payerKey: payer,

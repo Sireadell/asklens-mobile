@@ -19,4 +19,6 @@ export interface CheckResult {
   label?: string;
   /** True when the link or address was copied on a linked PC. */
   fromPc?: boolean;
+  /** Set by Send Guard when the address is, or only looks like, a saved contact. */
+  contactMatch?: { kind: 'exact' | 'lookalike'; name: string; address?: string };
 }

@@ -1,10 +1,10 @@
 import React, { useCallback, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { Alert, AppState, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import * as Clipboard from 'expo-clipboard';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getDemoBadLink } from '../lib/asklens';
+import { detectKind, extractInput, getDemoBadLink } from '../lib/asklens';
 import { loadPairing } from '../lib/pairing';
 import { loadStats, Stats } from '../lib/store';
 import {
@@ -22,6 +22,8 @@ import {
   todayCount,
 } from '../lib/guard';
 import { ProgressRing } from '../components/ProgressRing';
+import Intro from '../components/Intro';
+import * as Haptics from 'expo-haptics';
 import { WeekStrip } from '../components/WeekStrip';
 import { colors, radius } from '../theme';
 
@@ -37,6 +39,7 @@ export default function HomeScreen() {
   const [today, setToday] = useState(0);
   const [week, setWeek] = useState<DayCell[]>([]);
   const [pcLinked, setPcLinked] = useState(false);
+  const [clip, setClip] = useState<string | null>(null);
   const [allow, setAllow] = useState({ used: 0, limit: 10, holder: false });
 
   React.useEffect(() => {
@@ -61,10 +64,42 @@ export default function HomeScreen() {
     setPcLinked(!!(await loadPairing()));
     setAllow(await allowanceNow());
     setSettings(await loadSettings());
-    syncReminders();
-    // Holder status is read from the network in the background, then shown.
-    refreshTier().then(async () => setAllow(await allowanceNow()));
+    // Slower work waits until the screen is already showing.
+    setTimeout(() => {
+      syncReminders();
+      // Holder status is read from the network in the background, then shown.
+      refreshTier().then(async () => setAllow(await allowanceNow()));
+    }, 1500);
   }, []);
+
+  // Something copied in another app: offer to check it with one tap.
+  const readClip = useCallback(async () => {
+    try {
+      const t = (await Clipboard.getStringAsync()).trim();
+      if (!t || t.length > 600) return setClip(null);
+      const input = extractInput(t);
+      const kind = detectKind(input);
+      const isUrl = kind === 'link' && /^https?:\/\//i.test(input);
+      if (kind !== 'solana-address' && kind !== 'evm-address' && !isUrl) return setClip(null);
+      const last = await AsyncStorage.getItem('asklens.lastclip.v1');
+      setClip(last === input ? null : input);
+    } catch {
+      setClip(null);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    readClip();
+    const sub = AppState.addEventListener('change', (st) => {
+      if (st === 'active') readClip();
+    });
+    return () => sub.remove();
+  }, [readClip]);
+
+  const clipDone = async (input: string) => {
+    setClip(null);
+    AsyncStorage.setItem('asklens.lastclip.v1', input).catch(() => {});
+  };
 
   useFocusEffect(
     useCallback(() => {
@@ -114,18 +149,13 @@ export default function HomeScreen() {
 
   if (first) {
     return (
-      <View style={[styles.welcome, { paddingTop: insets.top + 40 }]}>
-        <Text style={styles.brand}>AskLens Guard</Text>
-        <Text style={styles.big}>Is this link or wallet safe?</Text>
-        <Text style={styles.sub}>
-          Share it to this app and get a clear green, amber or red answer in seconds. Nothing is opened for you.
-        </Text>
-        <View style={{ flex: 1 }} />
-        <Pressable style={styles.primary} onPress={start}>
-          <Text style={styles.primaryText}>Get started</Text>
-        </Pressable>
-        <View style={{ height: insets.bottom + 24 }} />
-      </View>
+      <Intro
+        onDone={start}
+        onDemo={async () => {
+          start();
+          go(await getDemoBadLink());
+        }}
+      />
     );
   }
 
@@ -137,7 +167,7 @@ export default function HomeScreen() {
         <Text style={styles.sub}>Pick how many things you will check each day. Most scams work because people rush.</Text>
         <View style={styles.goalRow}>
           {[1, 3, 5].map((g) => (
-            <Pressable key={g} style={[styles.goal, goalPick === g && styles.goalOn]} onPress={() => setGoalPick(g)}>
+            <Pressable key={g} style={[styles.goal, goalPick === g && styles.goalOn]} onPress={() => { Haptics.selectionAsync().catch(() => {}); setGoalPick(g); }}>
               <Text style={[styles.goalNum, goalPick === g && { color: colors.bg }]}>{g}</Text>
               <Text style={[styles.goalLabel, goalPick === g && { color: colors.bg }]}>
                 {g === 1 ? 'check a day' : 'checks a day'}
@@ -168,6 +198,29 @@ export default function HomeScreen() {
       <Text style={styles.sub}>
         Share a link or wallet address to this app from Telegram, X or your browser. You get an answer in seconds.
       </Text>
+
+      {!!clip && (
+        <View style={styles.clipBar}>
+          <Pressable
+            style={{ flex: 1 }}
+            onPress={() => {
+              const c = clip;
+              clipDone(c);
+              go(c);
+            }}
+          >
+            <Text style={styles.clipTitle}>
+              {detectKind(clip) === 'solana-address' ? 'Check this coin' : detectKind(clip) === 'evm-address' ? 'Check this address' : 'Check this link'}
+            </Text>
+            <Text style={styles.clipSub} numberOfLines={1}>
+              You copied {clip.length > 34 ? `${clip.slice(0, 14)}...${clip.slice(-8)}` : clip}
+            </Text>
+          </Pressable>
+          <Pressable onPress={() => clipDone(clip)} hitSlop={12} style={styles.clipX}>
+            <Text style={styles.clipXText}>✕</Text>
+          </Pressable>
+        </View>
+      )}
 
       <View style={styles.guardCard}>
         <View style={styles.guardTop}>
@@ -210,6 +263,10 @@ export default function HomeScreen() {
       <Pressable style={styles.secondary} onPress={() => nav.navigate('Scan')}>
         <Text style={styles.secondaryText}>Scan a QR code</Text>
       </Pressable>
+      <Pressable style={[styles.secondary, { borderWidth: 1, borderColor: colors.accent }]} onPress={() => nav.navigate('Contacts')}>
+        <Text style={styles.secondaryText}>Trusted contacts</Text>
+        <Text style={{ color: colors.dim, fontSize: 12, marginTop: 2 }}>Get warned when an address only looks like someone you pay</Text>
+      </Pressable>
 
       <View style={styles.remind}>
         <View style={{ flex: 1 }}>
@@ -251,6 +308,11 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
+  clipBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.accent, borderRadius: radius, paddingVertical: 14, paddingHorizontal: 16, marginTop: 18 },
+  clipTitle: { color: colors.bg, fontSize: 19, fontWeight: '800' },
+  clipSub: { color: colors.bg, opacity: 0.75, fontSize: 13, marginTop: 2 },
+  clipX: { paddingLeft: 14 },
+  clipXText: { color: colors.bg, fontSize: 18, fontWeight: '800' },
   brand: { color: colors.accent, fontSize: 14, letterSpacing: 1.5, textTransform: 'uppercase', fontWeight: '700' },
   headline: { color: colors.text, fontSize: 34, fontWeight: '800', marginTop: 8 },
   sub: { color: colors.dim, fontSize: 16, lineHeight: 23, marginTop: 8 },

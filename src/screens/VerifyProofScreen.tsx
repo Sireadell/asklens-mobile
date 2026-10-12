@@ -75,6 +75,7 @@ export default function VerifyProofScreen() {
           {result.streak ? <Row k="Proof streak" v={`Day ${result.streak}`} /> : null}
           <Row k="Signed by" v={short(result.signer)} />
           <Row k="Input fingerprint" v={result.inputHash} />
+          {result.facts ? <Row k="Words fingerprint" v={result.facts} /> : null}
           <Row k="Network" v={result.cluster === 'devnet' ? 'Test network' : 'Real network'} />
           <Pressable onPress={() => Linking.openURL(explorerTxUrl(result.signature, result.cluster))}>
             <Text style={styles.link}>View on Solana Explorer</Text>

@@ -6,6 +6,7 @@ import {
   connectWallet,
   disconnectWallet,
   getConnectedAddress,
+  getWalletName,
   getReceipts,
   getSolBalance,
   getWalletProfile,
@@ -25,6 +26,7 @@ export default function WalletScreen() {
   const [address, setAddress] = useState<string | null>(null);
   const [balance, setBalance] = useState<number | null>(null);
   const [profile, setProfile] = useState<WalletProfile | null>(null);
+  const [walletName, setWalletName] = useState('your wallet app');
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [tier, setTier] = useState<GuardTier | null>(null);
   const [streak, setStreak] = useState(0);
@@ -36,6 +38,7 @@ export default function WalletScreen() {
     setReceipts(await getReceipts());
     getProofStreak().then(setStreak).catch(() => setStreak(0));
     if (!addr) return;
+    getWalletName().then(setWalletName).catch(() => {});
     getSolBalance(addr).then(setBalance).catch(() => setBalance(null));
     getGuardTier(addr).then(setTier).catch(() => setTier(null));
     getWalletProfile(addr).then(setProfile).catch(() => setProfile(null));
@@ -113,7 +116,7 @@ export default function WalletScreen() {
         </View>
       ) : (
         <View style={styles.card}>
-          <Text style={styles.label}>Connected</Text>
+          <Text style={styles.label}>Connected with {walletName}</Text>
           <Text style={styles.addr} selectable>
             {short(address)}
           </Text>

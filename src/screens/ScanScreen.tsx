@@ -17,7 +17,7 @@ try {
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Scan'>;
 
-export default function ScanScreen({ navigation }: Props) {
+export default function ScanScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
   const [perm, requestPerm] = Camera?.useCameraPermissions ? Camera.useCameraPermissions() : [null, async () => {}];
   const done = useRef(false);
@@ -34,7 +34,8 @@ export default function ScanScreen({ navigation }: Props) {
       return;
     }
     done.current = true;
-    navigation.replace('Result', { text: input });
+    if (route.params?.forContact) navigation.popTo('Contacts', { scanned: input });
+    else navigation.replace('Result', { text: input });
   };
 
   if (!Camera?.CameraView) {

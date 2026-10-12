@@ -1,4 +1,4 @@
-﻿node_modules/
+node_modules/
 .env
 *.apk
 .expo/
@@ -6,10 +6,9 @@ android/
 ios/
 google-services.json
 
-_private/
+.claude/
 NOTES-SKR.md
 SUBMISSION_ANSWERS.md
+PHONE_CHECKLIST.md
 video/
-google-services.json
-*service-account*.json
-
+release/

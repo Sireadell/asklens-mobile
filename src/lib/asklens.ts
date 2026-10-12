@@ -2,6 +2,7 @@ import { profileFor } from './solanaBridge';
 import { getLinkEvidence } from './evidence';
 import { classifyAddress, Classified } from './classify';
 import { getTokenRisk } from './tokenRisk';
+import { applySendGuard } from './sendGuard';
 import type { CheckResult, Evidence, InputKind, Verdict } from '../types';
 
 const BASE =
@@ -207,8 +208,8 @@ export async function checkInput(text: string): Promise<CheckResult> {
   const kind = detectKind(input);
   try {
     if (kind === 'link') return await checkLink(input);
-    if (kind === 'evm-address') return await checkEvm(input);
-    if (kind === 'solana-address') return await checkSolana(input);
+    if (kind === 'evm-address') return await applySendGuard(await checkEvm(input));
+    if (kind === 'solana-address') return await applySendGuard(await checkSolana(input));
     return fail(input, 'unknown', 'That does not look like a link or a wallet address.');
   } catch (e: any) {
     const msg =

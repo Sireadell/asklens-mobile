@@ -1,13 +1,13 @@
 import './polyfills';
 
-export { connectWallet, saveReceipt, getConnectedAddress, disconnectWallet, getSolBalance, requestAirdrop, getReceipts, getReceiptFor, getProofStreak, revokeApproval } from './wallet';
+export { getWalletName, connectWallet, saveReceipt, getConnectedAddress, disconnectWallet, getSolBalance, requestAirdrop, getReceipts, getReceiptFor, getProofStreak, revokeApproval } from './wallet';
 export { buildRevokeInstruction } from './revoke';
 export type { Receipt } from './wallet';
 export { getWalletProfile } from './profile';
 export type { WalletProfile } from './profile';
 export { getCluster, setCluster, explorerTxUrl } from './config';
 export type { Cluster } from './config';
-export { buildReceiptMemo } from './receipt';
+export { buildReceiptMemo, factsHash } from './receipt';
 export { friendlyError } from './errors';
 export { getGuardTier, getSkrBalance, SKR_MINT, HOLDER_THRESHOLD } from './skr';
 export type { GuardTier } from './skr';

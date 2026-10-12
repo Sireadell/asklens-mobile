@@ -1,5 +1,4 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import { getConnectedAddressSafe, tierFor } from './solanaBridge';
 
@@ -151,28 +150,36 @@ const LINES = [
 const CHANNEL = 'daily-guard';
 const DAYS_AHEAD = 10;
 
-try {
-  Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowBanner: true,
-      shouldShowList: true,
-      shouldPlaySound: false,
-      shouldSetBadge: false,
-    }),
-  });
-} catch {}
+// Notifications load the first time they are needed, not when the app opens.
+let N: any = null;
+function notifications(): any {
+  if (!N) {
+    N = require('expo-notifications');
+    try {
+      N.setNotificationHandler({
+        handleNotification: async () => ({
+          shouldShowBanner: true,
+          shouldShowList: true,
+          shouldPlaySound: false,
+          shouldSetBadge: false,
+        }),
+      });
+    } catch {}
+  }
+  return N;
+}
 
 export async function askNotificationPermission(): Promise<boolean> {
   try {
     if (Platform.OS === 'android') {
-      await Notifications.setNotificationChannelAsync(CHANNEL, {
+      await notifications().setNotificationChannelAsync(CHANNEL, {
         name: 'Daily reminder',
-        importance: Notifications.AndroidImportance.DEFAULT,
+        importance: notifications().AndroidImportance.DEFAULT,
       });
     }
-    const cur = await Notifications.getPermissionsAsync();
+    const cur = await notifications().getPermissionsAsync();
     if (cur.granted) return true;
-    const asked = await Notifications.requestPermissionsAsync();
+    const asked = await notifications().requestPermissionsAsync();
     return asked.granted;
   } catch {
     return false;
@@ -185,20 +192,32 @@ export async function askNotificationPermission(): Promise<boolean> {
  */
 export async function syncReminders(): Promise<void> {
   try {
-    await Notifications.cancelAllScheduledNotificationsAsync();
+    await notifications().cancelAllScheduledNotificationsAsync();
     const s = await loadSettings();
     if (!s.pledged || !s.remindOn) return;
-    const perm = await Notifications.getPermissionsAsync();
+    const perm = await notifications().getPermissionsAsync();
     if (!perm.granted) return;
     const doneToday = (await todayCount()) >= s.goal;
+    // A streak is at risk when yesterday counted but nothing has been checked today.
+    let atRisk = 0;
+    try {
+      const raw = await AsyncStorage.getItem('asklens.stats.v1');
+      const st = raw ? JSON.parse(raw) : null;
+      const y = new Date();
+      y.setDate(y.getDate() - 1);
+      if (st && st.streak > 0 && st.lastDay === dayKey(y)) atRisk = st.streak;
+    } catch {}
     const now = new Date();
     for (let i = 0; i < DAYS_AHEAD; i++) {
       const when = new Date(now.getFullYear(), now.getMonth(), now.getDate() + i, s.remindHour, 0, 0);
       if (when.getTime() <= now.getTime() + 60000) continue;
       if (i === 0 && doneToday) continue;
-      await Notifications.scheduleNotificationAsync({
-        content: { title: 'AskLens Guard', body: LINES[(when.getDate() + i) % LINES.length] },
-        trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: when, channelId: CHANNEL },
+      await notifications().scheduleNotificationAsync({
+        content:
+          i === 0 && atRisk
+            ? { title: 'Your streak is at risk', body: `Check one link to keep your ${atRisk} day streak.` }
+            : { title: 'AskLens Guard', body: LINES[(when.getDate() + i) % LINES.length] },
+        trigger: { type: notifications().SchedulableTriggerInputTypes.DATE, date: when, channelId: CHANNEL },
       });
     }
   } catch {}

@@ -124,6 +124,22 @@ export async function getTokenRisk(mint: string, known?: { mintInfo?: any; token
   if (rug) {
     rugScore = typeof rug.score_normalised === 'number' ? rug.score_normalised : undefined;
     const risks: any[] = (rug.risks ?? []).slice().sort((a: any, b: any) => (a.level === 'danger' ? -1 : 0) - (b.level === 'danger' ? -1 : 0));
+    // Two more facts from the same RugCheck summary: how much liquidity is locked, and its overall risk score.
+    const locked = typeof rug.lpLockedPct === 'number' && isFinite(rug.lpLockedPct) ? rug.lpLockedPct : undefined;
+    if (locked !== undefined && pairs.length > 0 && liquidityUsd > 0) {
+      const pct = Math.max(1, Math.round(locked));
+      if (locked >= 80) {
+        lines.push({ level: 'info', text: `About ${pct}% of the liquidity is locked.` });
+      } else if (locked > 0 && locked < 20 && !deep) {
+        lines.push({ level: 'warn', text: `Only ${pct}% of the liquidity is locked. The creator may be able to pull the money out.` });
+        raise('caution');
+      }
+    }
+    if (rugScore !== undefined) {
+      const warn = rugScore >= 50;
+      lines.push({ level: warn ? 'warn' : 'info', text: `RugCheck risk score: ${Math.round(rugScore)} out of 100 (lower is safer).` });
+      if (warn) raise('caution');
+    }
     let shown = 0;
     for (const r of risks) {
       if (shown >= 2) break;
@@ -143,4 +159,73 @@ export async function getTokenRisk(mint: string, known?: { mintInfo?: any; token
   }
 
   return { lines, verdict, liquidityUsd: pairs.length ? liquidityUsd : undefined, pairAgeDays, rugScore, symbol: base?.symbol, name: base?.name };
+}
+
+// ---------------------------------------------------------------------------
+// Meme coin sources: four free places read at the same time, each with its own
+// 2.5 second cut-off. Whatever lands is passed on right away.
+
+export const SOURCE_CUTOFF_MS = 2500;
+
+export type SourceName = 'jupiter' | 'chain' | 'dex' | 'rug';
+
+export interface MemeSources {
+  jupiter?: any; // first match of Jupiter search, or null when it has none
+  chain?: { info?: any; token2022: boolean } | null;
+  dex?: any;
+  rug?: any;
+}
+
+function cutoff<T>(p: Promise<T>, ms = SOURCE_CUTOFF_MS): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error('timeout')), ms);
+    p.then(
+      (v) => {
+        clearTimeout(t);
+        resolve(v);
+      },
+      (e) => {
+        clearTimeout(t);
+        reject(e);
+      }
+    );
+  });
+}
+
+/**
+ * Starts all four reads at once. `onSource` fires as each one lands (value is null
+ * if it failed or ran past the cut-off). Resolves when all four are done.
+ */
+export async function readMemeSources(
+  mint: string,
+  onSource: (name: SourceName, value: any, all: MemeSources) => void,
+  timeoutMs = SOURCE_CUTOFF_MS
+): Promise<{ sources: MemeSources; missing: SourceName[] }> {
+  const sources: MemeSources = {};
+  const missing: SourceName[] = [];
+  const run = (name: SourceName, load: () => Promise<any>) =>
+    cutoff(load(), timeoutMs)
+      .catch(() => null)
+      .then((v) => {
+        (sources as any)[name] = v;
+        if (v === null) missing.push(name);
+        onSource(name, v, { ...sources });
+      });
+  await Promise.all([
+    run('jupiter', () =>
+      cached(`jup.${mint}`, async () => {
+        const arr = await fetchJson(`https://lite-api.jup.ag/tokens/v2/search?query=${encodeURIComponent(mint)}`, {}, timeoutMs);
+        return (Array.isArray(arr) ? arr : []).find((t: any) => t?.id === mint) ?? { none: true };
+      })
+    ),
+    run('chain', () =>
+      cached(`mint.${mint}`, async () => {
+        const r = await rpc('getAccountInfo', [mint, { encoding: 'jsonParsed' }]);
+        return { info: r?.value?.data?.parsed?.info, token2022: r?.value?.owner === TOKEN_2022_PROGRAM };
+      })
+    ),
+    run('dex', () => cached(`dex.${mint}`, () => fetchJson(`https://api.dexscreener.com/latest/dex/tokens/${mint}`, {}, timeoutMs))),
+    run('rug', () => cached(`rug.${mint}`, () => fetchJson(`https://api.rugcheck.xyz/v1/tokens/${mint}/report/summary`, {}, timeoutMs))),
+  ]);
+  return { sources, missing };
 }

@@ -20,19 +20,11 @@ const dir = process.env.ASKLENS_COMPANION_DIR ||
 const pairFile = path.join(dir, 'pairing.json');
 const pauseFile = path.join(dir, 'paused');
 
-// What counts as worth sending. The whole copied text must BE a link or an
-// address, so a paragraph that happens to contain one is left alone.
-const LINK_RE = /^https?:\/\/\S+$/i;
-const EVM_RE = /^0x[a-fA-F0-9]{40}$/;
-const SOLANA_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
-
-function classify(text) {
-  if (text.length > 2000) return null;
-  if (LINK_RE.test(text)) return 'link';
-  if (EVM_RE.test(text)) return 'evm-address';
-  if (SOLANA_RE.test(text)) return 'solana-address';
-  return null;
-}
+const { classify, createDedupe } = require('./lib/detect');
+const { checkLink, createAddressWatch, loadBlocklist } = require('./lib/precheck');
+const login = require('./lib/login');
+const blocklistFile = path.join(dir, 'blocklist.txt');
+const trayFile = path.join(dir, 'tray-in.txt');
 
 function short(text, kind) {
   if (kind === 'link') {
@@ -115,6 +107,8 @@ async function main() {
       'AskLens PC companion',
       '',
       '  node companion.js              start (pairs the first time)',
+      '  node companion.js --tray       run quietly with a tray icon and a pairing window',
+      '  node companion.js --repair     pair a new phone with a fresh code',
       '  node companion.js --pause      stop sending without closing, until --resume',
       '  node companion.js --resume     start sending again',
       '  node companion.js --unpair     forget the phone and delete the saved pairing',
@@ -142,22 +136,102 @@ async function main() {
 
   if (pairing && wanted && wanted.replace(/\/$/, '') !== pairing.relay) pairing = null; // new relay, new pairing
   const relay = (wanted || (pairing && pairing.relay) || DEFAULT_RELAY).replace(/\/$/, '');
+  const tray = flag('--tray');
 
-  if (!pairing) {
-    console.log('Setting up a pairing with ' + relay + ' ...');
-    let r;
-    try { r = await api(relay, 'POST', '/v1/pair'); }
-    catch (e) { console.log('I could not reach the relay (' + e.message + '). Check your internet and try again.'); process.exit(1); }
-    if (r.status !== 200) { console.log('The relay said no (' + r.status + '). Try again in a minute.'); process.exit(1); }
-    pairing = { relay, pairId: r.json.pairId, secret: r.json.secret };
-    savePairing(pairing);
-    showPairing({ ...pairing, code: r.json.code });
-  } else {
-    console.log('Already paired with your phone. Run with --unpair to start over.');
+  // The newest pairing code, kept in memory only. The relay forgets it after 10 minutes.
+  const state = { pairing, code: null, codeAt: 0, relay };
+  async function newPairing() {
+    const r = await api(state.relay, 'POST', '/v1/pair');
+    if (r.status !== 200) throw new Error('The relay said no (' + r.status + '). Try again in a minute.');
+    state.pairing = { relay: state.relay, pairId: r.json.pairId, secret: r.json.secret };
+    state.code = r.json.code;
+    state.codeAt = Date.now();
+    savePairing(state.pairing);
   }
 
-  console.log('Watching what you copy. Only links and wallet addresses go to your phone.');
-  console.log('Everything else you copy, like passwords or normal text, is ignored. Ctrl+C to stop.\n');
+  if (!state.pairing) {
+    console.log('Setting up a pairing with ' + relay + ' ...');
+    try { await newPairing(); }
+    catch (e) { console.log('I could not set up pairing (' + e.message + '). Check your internet and try again.'); process.exit(1); }
+    if (!tray) showPairing({ ...state.pairing, code: state.code });
+  } else if (!tray) {
+    console.log('Already paired with your phone. Run with --unpair to start over, or --repair to pair a new phone.');
+  }
+  if (flag('--repair') && !tray) {
+    try { await newPairing(); showPairing({ ...state.pairing, code: state.code }); }
+    catch (e) { console.log('Could not make a new code: ' + e.message); process.exit(1); }
+  }
+
+  const notifyTray = (title, body) => {
+    if (!tray) return;
+    try { fs.appendFileSync(trayFile, 'notify\t' + title + '\t' + body.replace(/\s+/g, ' ') + '\n'); } catch { /* tray will miss one balloon */ }
+  };
+  const say = (line) => console.log(line);
+  const isPaused = () => fs.existsSync(pauseFile);
+
+  // Everything copied goes through here.
+  const dedupe = createDedupe();
+  const addresses = createAddressWatch();
+  async function handleCopy(found) {
+    const { kind, text } = found;
+    const key = kind + ':' + (kind === 'evm-address' ? text.toLowerCase() : text);
+    if (dedupe.isRepeat(key)) return;
+    if (!state.pairing) return;
+    if (isPaused()) { say('paused, not sent: ' + short(text, kind)); return; }
+    let warning = null;
+    if (kind === 'link') {
+      const bad = checkLink(text, loadBlocklist(blocklistFile));
+      if (bad) {
+        say('BLOCKED on this PC, not sent: ' + short(text, kind) + ' (' + bad.why + ')');
+        notifyTray('Link blocked', short(text, kind) + ': ' + bad.why + '. Not sent to your phone.');
+        return;
+      }
+    } else {
+      warning = addresses.check(text);
+      if (warning) {
+        say('WARNING: ' + short(text, kind) + ' ' + warning.why);
+        notifyTray('Careful with this address', 'It ' + warning.why + '. Check every character.');
+      }
+    }
+    try {
+      const r = await api(state.pairing.relay, 'POST', '/v1/send', { pairId: state.pairing.pairId, kind, text }, state.pairing.secret);
+      if (r.status === 200) say('sent to your phone: ' + short(text, kind));
+      else if (r.status === 401) { say('Your phone is no longer paired. Run with --unpair, then start again.'); notifyTray('Phone not paired', 'Open the pairing window to pair again.'); }
+      else if (r.status === 429) say('Too many copies in a minute, skipped: ' + short(text, kind));
+      else say('could not send (' + r.status + '): ' + short(text, kind));
+    } catch (e) {
+      say('could not reach the relay, skipped: ' + short(text, kind));
+    }
+  }
+
+  if (tray) {
+    const win = require('./lib/window').start({ state, newPairing, readPairing, savePairing, api, pairFile, flagOpen: true });
+    const { spawn: sp } = require('child_process');
+    try { fs.unlinkSync(trayFile); } catch { /* none */ }
+    const ps = sp('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-STA', '-File',
+      path.join(__dirname, 'tray.ps1'), '-InFile', trayFile, '-Paused', isPaused() ? '1' : '0', '-Login', login.isEnabled() ? '1' : '0'],
+    { stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true });
+    let buf = '';
+    ps.stdout.on('data', (d) => {
+      buf += d.toString();
+      let i;
+      while ((i = buf.indexOf('\n')) >= 0) {
+        const cmd = buf.slice(0, i).trim(); buf = buf.slice(i + 1);
+        if (cmd === 'open') win.open();
+        else if (cmd === 'pause') { fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(pauseFile, '1'); }
+        else if (cmd === 'resume') { try { fs.unlinkSync(pauseFile); } catch { /* ok */ } }
+        else if (cmd === 'login-on') { try { login.enable(dir, __filename); notifyTray('Start at sign in is on', 'The companion will start by itself when you sign in.'); } catch (e) { notifyTray('Could not set start at sign in', e.message); } }
+        else if (cmd === 'login-off') login.disable();
+        else if (cmd === 'quit') process.exit(0);
+      }
+    });
+    ps.on('exit', () => process.exit(0));
+    process.on('exit', () => ps.kill());
+    if (!readPairing() || state.code) win.open(); // first run: show the pairing window straight away
+  } else {
+    console.log('Watching what you copy. Only links and wallet addresses go to your phone.');
+    console.log('Everything else you copy, like passwords or normal text, is ignored. Ctrl+C to stop.\n');
+  }
 
   let last = null; // first clipboard reading is skipped, so old content is not sent
   let first = true;
@@ -166,18 +240,8 @@ async function main() {
     if (first) { first = false; last = text; return; }
     if (text === last) return;
     last = text;
-    const kind = classify(text);
-    if (!kind) return;
-    if (fs.existsSync(pauseFile)) { console.log('paused, not sent: ' + short(text, kind)); return; }
-    try {
-      const r = await api(pairing.relay, 'POST', '/v1/send', { pairId: pairing.pairId, kind, text }, pairing.secret);
-      if (r.status === 200) console.log('sent to your phone: ' + short(text, kind));
-      else if (r.status === 401) console.log('Your phone is no longer paired. Run with --unpair, then start again.');
-      else if (r.status === 429) console.log('Too many copies in a minute, skipped: ' + short(text, kind));
-      else console.log('could not send (' + r.status + '): ' + short(text, kind));
-    } catch (e) {
-      console.log('could not reach the relay, skipped: ' + short(text, kind));
-    }
+    const found = classify(text);
+    if (found) await handleCopy(found);
   });
 }
 
