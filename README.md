@@ -36,6 +36,15 @@ The live checks come from Telegraph, a network of independent intelligence provi
 - It is not complete. The on-phone scam list is built from two public lists and I do not claim it covers everything.
 - The wallet connection, share-to-check and receipts need a real Android phone, so the automated tests do not cover them.
 
+## Built in one day
+I built the app on October 12, 2026, the day before the deadline. The first commit is at 2:54 PM and the 39 commits in the app itself run to 7:49 PM, with the GoPlus check and the final build added that night. Some corners are rougher than I would like, and the "What this is not" list above is my honest list of them.
+
+## What I would add next
+- GoPlus phishing site checks as one more opinion on links (I tested the free GoPlus endpoint live, but have not read its rate limits and terms yet).
+- GoPlus Solana token checks next to RugCheck.
+- Testing on more phones. The Share menu entry and the wallet connection have only been tried on one Android phone.
+- A scam list for Solana addresses, once a public one exists.
+
 ## Run it
 Cloud build of an APK (needs an Expo account):
 
