@@ -3,6 +3,7 @@ import { getLinkEvidence } from './evidence';
 import { classifyAddress, Classified } from './classify';
 import { getTokenRisk } from './tokenRisk';
 import { applySendGuard } from './sendGuard';
+import { fetchGoPlusAddress } from './goplus';
 import type { CheckResult, Evidence, InputKind, Verdict } from '../types';
 
 const BASE =
@@ -104,19 +105,48 @@ async function checkLink(input: string): Promise<CheckResult> {
 }
 
 async function checkEvm(input: string): Promise<CheckResult> {
-  const { ok, data } = await postJson('check-wallet', { address: input });
-  if (!ok) return fail(input, 'evm-address', data?.message ?? 'The check service did not answer. Try again.');
+  // The Telegraph checker and GoPlus run side by side. GoPlus can only make the answer worse.
+  let liveError: unknown = null;
+  const [live, goplus] = await Promise.all([
+    postJson('check-wallet', { address: input }).catch((e) => {
+      liveError = e;
+      return null;
+    }),
+    fetchGoPlusAddress(input),
+  ]);
+  const flagged = !!goplus?.some((e) => e.level === 'bad');
+  const warned = !!goplus?.some((e) => e.level === 'warn');
+
+  if (!live || !live.ok) {
+    if (!goplus && liveError) throw liveError;
+    if (!goplus) return fail(input, 'evm-address', live?.data?.message ?? 'The check service did not answer. Try again.');
+    return {
+      input,
+      kind: 'evm-address',
+      verdict: flagged ? 'danger' : warned ? 'caution' : 'unknown',
+      reasons: ['The Telegraph checker did not answer. This is the GoPlus answer only.'],
+      source: 'GoPlus Security',
+      checkedAt: Date.now(),
+      evidence: goplus,
+    };
+  }
+  const data = live.data;
   const overall: string = data.overall;
-  const verdict: Verdict =
+  let verdict: Verdict =
     overall === 'dangerous' ? 'danger' : overall === 'caution' ? 'caution' : overall === 'safe' ? 'safe' : 'unknown';
   const inconclusive = /INCONCLUSIVE/i.test(data.reason ?? '');
+  if (inconclusive && verdict === 'safe') verdict = 'unknown';
+  if (flagged) verdict = 'danger';
+  else if (warned && (verdict === 'safe' || verdict === 'unknown')) verdict = 'caution';
+  const miner = data.miner ?? 'Telegraph Sentinel';
   return {
     input,
     kind: 'evm-address',
-    verdict: inconclusive && verdict === 'safe' ? 'unknown' : verdict,
+    verdict,
     reasons: [data.reason ?? 'No reason given.'],
-    source: data.miner ?? 'Telegraph Sentinel',
+    source: goplus ? `${miner} + GoPlus Security` : miner,
     checkedAt: Date.now(),
+    ...(goplus ? { evidence: goplus } : {}),
   };
 }
 
