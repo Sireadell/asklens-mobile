@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>AskLens Guard</title>
+<style>
+:root{--bg:#0b0d10;--panel:#14181d;--line:#262c34;--ink:#f2f4f6;--mute:#98a2ad;--acc:#7cf0b0;--warn:#ffc857;--bad:#ff6b6b}
+*{box-sizing:border-box;margin:0}
+html,body{height:100%;background:var(--bg);color:var(--ink);font-family:Inter,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;overflow:hidden}
+#deck{height:100%;width:100%;position:relative}
+.slide{position:absolute;inset:0;display:none;padding:clamp(20px,5vw,72px) clamp(20px,6vw,96px) 72px;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.slide.on{display:flex;flex-direction:column;justify-content:center;gap:clamp(14px,2.4vw,28px)}
+.kicker{color:var(--acc);font-size:clamp(12px,1.4vw,16px);letter-spacing:.12em;text-transform:uppercase;font-weight:600}
+h1{font-size:clamp(34px,7vw,92px);line-height:1.02;letter-spacing:-.03em;font-weight:700}
+h2{font-size:clamp(26px,4.4vw,56px);line-height:1.08;letter-spacing:-.02em;font-weight:700;max-width:22ch}
+p,li{font-size:clamp(16px,2vw,26px);line-height:1.4;color:#d5dae0;max-width:46ch}
+.mute{color:var(--mute)}
+.wide p,.wide li{max-width:60ch}
+.row{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,230px),1fr));gap:14px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:clamp(14px,2vw,24px)}
+.card b{display:block;font-size:clamp(16px,1.9vw,24px);margin-bottom:6px}
+.card span{font-size:clamp(14px,1.55vw,19px);color:var(--mute);line-height:1.4;display:block}
+.num{color:var(--acc);font-weight:700;font-size:clamp(14px,1.6vw,20px);margin-bottom:6px;display:block}
+.shots{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr));gap:14px;max-width:900px}
+.shot{aspect-ratio:9/16;max-height:30vh;border:1px dashed #4a5560;border-radius:14px;background:#101418;display:flex;align-items:center;justify-content:center;text-align:center;padding:12px;color:var(--mute);font-size:clamp(11px,1.2vw,14px);overflow:hidden}
+.shot img{width:100%;height:100%;object-fit:contain;border-radius:10px}
+.shot.has{border:1px solid var(--line);padding:0}
+.shots.two{max-width:520px}
+.split{display:grid;grid-template-columns:1.1fr 1fr;gap:clamp(16px,3vw,48px);align-items:center}
+@media(max-width:760px){.split{grid-template-columns:1fr}.shot{max-height:26vh}}
+ul{padding-left:1.1em;display:grid;gap:8px}
+.card li{font-size:clamp(14px,1.6vw,20px)}@media(max-height:760px){.slide{padding-top:20px;padding-bottom:64px}.slide.on{gap:12px}}
+.tag{display:inline-block;border:1px solid var(--line);border-radius:6px;padding:2px 8px;font-size:.8em;color:var(--mute);margin-right:6px}
+.ok li::marker{color:var(--acc)}.no li::marker{color:var(--warn)}
+.repo{font-family:ui-monospace,Consolas,monospace;color:var(--acc);font-size:clamp(16px,2.4vw,30px);word-break:break-all}
+#bar{position:fixed;left:0;right:0;bottom:0;height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 clamp(16px,4vw,48px);background:linear-gradient(transparent,var(--bg) 40%);color:var(--mute);font-size:14px;user-select:none}
+#bar button{background:var(--panel);border:1px solid var(--line);color:var(--ink);border-radius:10px;width:44px;height:40px;font-size:18px;cursor:pointer}
+#dots{display:flex;gap:6px}#dots i{width:7px;height:7px;border-radius:50%;background:var(--line)}#dots i.on{background:var(--acc)}
+@media print{html,body{overflow:visible;height:auto}.slide{position:relative;display:flex!important;flex-direction:column;justify-content:center;min-height:100vh;page-break-after:always;break-after:page;overflow:visible}#bar{display:none}}
+@page{size:1280px 720px;margin:0}
+</style>
+</head>
+<body>
+<div id="deck">
+
+<section class="slide on">
+  <div class="kicker">Solana Mobile Clock In</div>
+  <h1>AskLens Guard</h1>
+  <p style="font-size:clamp(20px,3vw,38px);max-width:24ch;color:var(--ink)">Tap Share on any link or wallet address. Get a green, amber or red answer.</p>
+  <p class="mute">An Android app for Solana Seeker owners. Solo build by Adel, Nigeria.</p>
+</section>
+
+<section class="slide">
+  <div class="kicker">The problem</div>
+  <h2>On a phone, you copy things you can't check.</h2>
+  <div class="row">
+    <div class="card"><b>A link in a group chat</b><span>It says "claim your airdrop". Maybe it's a fake dApp Store page.</span></div>
+    <div class="card"><b>An address from a stranger</b><span>Looks right at the start and end. Address poisoning counts on that.</span></div>
+    <div class="card"><b>No pause built in</b><span>Copy, paste, sign. The check, if any, happens after the money moves.</span></div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="kicker">What it does</div>
+  <h2>Share it to AskLens Guard and see if it's safe before you open or pay.</h2>
+  <p class="mute">It lives in the Android share menu, so it works from Telegram, X and the browser without copying anything around.</p>
+</section>
+
+<section class="slide">
+  <div class="kicker">How it works</div>
+  <h2>Share menu to verdict, in a few seconds.</h2>
+  <div class="split">
+    <div class="row" style="grid-template-columns:1fr 1fr">
+      <div class="card"><span class="num">1</span><b>Share</b><span>Pick AskLens Guard in the share sheet.</span></div>
+      <div class="card"><span class="num">2</span><b>Live check</b><span>Links go to three live Telegraph checkers at once.</span></div>
+      <div class="card"><span class="num">3</span><b>Wallet facts</b><span>Solana addresses get a profile: balance, age, activity, tokens.</span></div>
+      <div class="card"><span class="num">4</span><b>Proof</b><span>Save a signed receipt of the check on Solana.</span></div>
+    </div>
+    <div class="shots two">
+      <div class="shot" data-img="01-home.png">PLACEHOLDER<br>Capture: Home screen with the paste box, streak and "scams caught" count. File: img/01-home.png</div>
+      <div class="shot" data-img="02-result.png">PLACEHOLDER<br>Capture: a Result screen showing a big red or amber verdict for a link. File: img/02-result.png</div>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="kicker">The Solana part</div>
+  <h2>Connect your wallet. Keep a receipt you can show anyone.</h2>
+  <div class="split">
+    <ul class="ok">
+      <li>Connect with Mobile Wallet Adapter, the same way Seeker apps do.</li>
+      <li>Wallet profile read from the Solana network: balance, age, transaction count, top tokens.</li>
+      <li>Save proof sends a small memo transaction: the verdict, a short fingerprint of what you checked, and a time. Open it in the explorer.</li>
+    </ul>
+    <div class="shots two">
+      <div class="shot" data-img="03-wallet.png">PLACEHOLDER<br>Capture: Wallet screen, connected, showing balance and top tokens. File: img/03-wallet.png</div>
+      <div class="shot" data-img="04-proof.png">PLACEHOLDER<br>Capture: the saved proof / explorer link after "Save proof on Solana". File: img/04-proof.png</div>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="kicker">Why mobile</div>
+  <h2>The risky moment happens in a chat app, on a phone.</h2>
+  <div class="row">
+    <div class="card"><b>Android share sheet</b><span>The check sits one tap from where the link arrives. No copy, no switching apps.</span></div>
+    <div class="card"><b>Wallet connect</b><span>Mobile Wallet Adapter signs the receipt in the wallet app you already use.</span></div>
+    <div class="card"><b>Seeker owners</b><span>Self-custody phone, dApp Store, constant exposure to new links and addresses.</span></div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="kicker">Why people come back</div>
+  <h2>You check things every day, so it should keep count.</h2>
+  <div class="row">
+    <div class="card"><b>Daily streak</b><span>Days in a row you checked before you tapped.</span></div>
+    <div class="card"><b>Risky things caught</b><span>A running count of amber and red results.</span></div>
+    <div class="card"><b>History</b><span>Your last 100 checks, so you can find that link again.</span></div>
+    <div class="card"><b>Share card</b><span>Catch something, post a picture of it, warn your group.</span></div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="kicker">What already exists</div>
+  <h2>AskLens is live. The Android app is new.</h2>
+  <div class="row">
+    <div class="card"><b>ClipGuard for Windows</b><span>Checks copied links and 0x addresses from the tray.</span></div>
+    <div class="card"><b>MetaMask Snap</b><span>Wallet risk warning before you approve.</span></div>
+    <div class="card"><b>MCP for Claude and Cursor</b><span>One check_this action for a link, address or transaction.</span></div>
+    <div class="card"><b>Telegraph Season I, Track 3</b><span>The existing entry. Two Telegraph miners run by us.</span></div>
+  </div>
+  <p class="mute">Built during this hackathon: the Android app, share-to-check, Solana wallet profile, signed receipts, streak and share card.</p>
+</section>
+
+<section class="slide wide">
+  <div class="kicker">Honest status</div>
+  <h2>What's real today, and what isn't.</h2>
+  <div class="row" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr))">
+    <div class="card ok"><b>Real</b>
+      <ul class="ok" style="margin-top:8px">
+        <li>Share a link in and get a verdict from the live service</li>
+        <li>Ethereum 0x address checks (slower, often "not sure")</li>
+        <li>History, streak, share card</li>
+        <li>Solana wallet profile from the Solana network</li>
+        <li>App compiles and bundles for Android</li>
+      </ul></div>
+    <div class="card no"><b>Limits</b>
+      <ul class="no" style="margin-top:8px">
+        <li>The live service doesn't check Solana addresses. We show wallet facts, not a scam verdict, and the screen says so.</li>
+        <li>About 10 checks per 10 minutes per phone</li>
+        <li>Proof receipt: code written, devnet send not yet proven end to end</li>
+        <li>Not yet tested on a physical phone at time of writing</li>
+      </ul></div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="kicker">What's next</div>
+  <h2>Roadmap</h2>
+  <ul>
+    <li>Real Solana address verdicts once a Solana checker is live, and a Seeker dApp Store listing.</li>
+    <li>Warn before a pasted address looks like one you've sent to before.</li>
+  </ul>
+  <p style="margin-top:12px" class="mute">Code and APK</p>
+  <div class="repo">GITHUB_REPO_URL</div>
+  <p class="mute">Live service behind it: asklens-zoox.onrender.com</p>
+</section>
+
+</div>
+<div id="bar"><button id="prev" aria-label="Previous">&larr;</button><div id="dots"></div><span id="count"></span><button id="next" aria-label="Next">&rarr;</button></div>
+<script>
+(function(){
+  var s=[].slice.call(document.querySelectorAll('.slide')),i=0,dots=document.getElementById('dots'),cnt=document.getElementById('count');
+  s.forEach(function(){dots.appendChild(document.createElement('i'))});
+  function go(n){i=Math.max(0,Math.min(s.length-1,n));s.forEach(function(e,k){e.classList.toggle('on',k===i)});
+    [].forEach.call(dots.children,function(d,k){d.classList.toggle('on',k===i)});cnt.textContent=(i+1)+' / '+s.length;
+    s[i].scrollTop=0;try{history.replaceState(null,'','#'+(i+1))}catch(e){}}
+  document.getElementById('next').onclick=function(){go(i+1)};
+  document.getElementById('prev').onclick=function(){go(i-1)};
+  document.addEventListener('keydown',function(e){
+    if(['ArrowRight','PageDown',' ','Enter'].indexOf(e.key)>-1){e.preventDefault();go(i+1)}
+    else if(['ArrowLeft','PageUp','Backspace'].indexOf(e.key)>-1){e.preventDefault();go(i-1)}
+    else if(e.key==='Home')go(0);else if(e.key==='End')go(s.length-1)});
+  var x=null,y=null;
+  document.addEventListener('touchstart',function(e){x=e.touches[0].clientX;y=e.touches[0].clientY},{passive:true});
+  document.addEventListener('touchend',function(e){if(x===null)return;var dx=e.changedTouches[0].clientX-x,dy=e.changedTouches[0].clientY-y;
+    if(Math.abs(dx)>50&&Math.abs(dx)>Math.abs(dy)*1.5)go(i+(dx<0?1:-1));x=null},{passive:true});
+  // screenshots: use img/<file> if it exists, else keep placeholder
+  [].forEach.call(document.querySelectorAll('.shot[data-img]'),function(b){
+    var im=new Image();im.onload=function(){b.innerHTML='';b.appendChild(im);b.classList.add('has')};
+    im.alt='AskLens Guard screenshot';im.src='img/'+b.getAttribute('data-img')});
+  var h=parseInt(location.hash.slice(1),10);go(h?h-1:0);
+})();
+</script>
+</body>
+</html>
